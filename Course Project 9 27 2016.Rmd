@@ -1,0 +1,115 @@
+---
+title: "Coursera Practical Machine Learning"
+author: "Kenneth Preston"
+date: "September 27, 2016"
+output: html_document
+---
+
+### Background 
+
+Data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants were collected as they were asked to perform barbell lifts correctly and incorrectly in 5 different ways. We are tasked with predicting how the barbell lifts were performed. More information is available from the website here: 
+[link](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset)
+
+### Data
+
+The training data for this project are available here:
+[link](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+The test data are available here:
+[link](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+The data for this project come from this source: 
+[link](http://groupware.les.inf.puc-rio.br/har)
+
+
+### Goal 
+
+The goal of this project is to predict the manner in which participants did the exercise ("classe" variable in the training set). This variable includes 5 outcomes (A,B,C,D,E), where A indicates the action was performed correctly. 
+  * The primary goal of this study is to predict "classe" with the highest accuracy possible. 
+  * Speed is not a consideration as this algorithm is not intended for real-time implementation.
+
+### Method Chosen for Model Building - Random Forest
+
+I have decided to use Random Forest because of its high level of accuracy and history of being one of the two top algorithms in prediction contests. This method is computationally intensive, but speed is not a concern in this project - accuracy is most important. Since accuracy is optimisitic on the training set I decided to split my training set into a training and test sets through cross validation. This will give a better estimate of the out of sample error. If satisfied with the pseudo out of sample performance of the model I would then use the model to predict the test set.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+### Loading Required Package
+
+```{r , echo=FALSE}
+library(caret)
+```
+
+### Loading Training and Testing Sets 
+```{r , echo=TRUE}
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+### Data Exploration
+
+The review of the data shows the following
+* Some variables are unnecessary for prediction
+* A number of variables had missing data, with some with NA in the cells and some just empty
+* A number of variables did not follow a normal distribution, suggesting linear models would not be appropriate for prediction
+
+### Cleaning Data 
+
+The first 7 variables, including user name and new window, are not valid predictors for the "classe" variables so they will be removed from the feature set. Any variable with mostly missing data are also removed as they would not be good for prediction.
+
+```{r , echo=TRUE}
+training <- training[,8:160] 
+
+training[training==""] <- NA
+
+
+casemissing <- 0
+for (i in c(1:153)) {
+  casemissing[i] <- sum(is.na(training[,i]))
+}
+nameofvars <- names(training)
+casemissing <- as.data.frame(casemissing)
+rownames(casemissing) <- nameofvars
+
+casemissing <- subset(casemissing, casemissing == 0, 
+                  select=c(casemissing))
+CompleteVarsTraining <- rownames(casemissing)
+
+training <- subset(training, select = paste(CompleteVarsTraining))
+```
+
+This reduces the training set from 160 variables down to 53 valid variables, including "Classe". This makes 52 potential predictors and 1 dependent, "classe", to be used for training. For consistent results I set the seed value.
+
+### Cross Validation
+Next I performed a 10-fold Cross Validation using the trainControl function. This will allows me to understand the average error across the folds and better predict the out of sample error.
+```{r , echo=TRUE}
+set.seed(3333)
+control <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+```
+
+### Training the Model with Random Forest and Cross Validation from the Caret Package
+```{r , echo=FALSE}
+model<- train(classe~., data=training, trControl=control, method="rf")
+```
+
+### First Evaluation - Using the Training Set 
+
+The Random Forest Cross Validated model predicts the actual "classe" values in the training set quite well, with an accuracy level of 99% and an error rate of 0.6%. I believe this would be a good approximation of the actual out of sample error rate - meaning the likelihood of predicting all 20 test cases correctly is close to 100%.
+
+```{r , echo=TRUE}
+model_cm <- confusionMatrix(model$pred[,1], model$pred[,2])
+model_cm
+```
+
+### Second Evaluation - Predicting the testing set
+
+Below is the prediction of the testing data. The predicted classe will be submitted for evaluation for the Coursera Practical Machine Learning final project. The prediction of the testing set was completed with 100% accuracy. 
+
+```{r , echo=TRUE}
+pred_val <- predict(model, testing)
+pred_val
+
+testing[,161] <- pred_val
+testing[,160:161]
